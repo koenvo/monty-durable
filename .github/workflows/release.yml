@@ -39,14 +39,14 @@ jobs:
       - name: Test sdist
         run: |
           uv venv --python ${{ env.PYTHON_VERSION }} .venv-test
-          .venv-test/bin/python -m pip install dist/*.tar.gz
+          uv pip install --python .venv-test/bin/python dist/*.tar.gz
           .venv-test/bin/python -c 'import durable_monty'
 
       - name: Test wheel
         run: |
           rm -rf .venv-test
           uv venv --python ${{ env.PYTHON_VERSION }} .venv-test
-          .venv-test/bin/python -m pip install dist/*.whl
+          uv pip install --python .venv-test/bin/python dist/*.whl
           .venv-test/bin/python -c 'import durable_monty'
 
       - name: Upload artifacts
