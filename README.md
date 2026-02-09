@@ -2,6 +2,18 @@
 
 **Durable functions for Python.** Write normal `async/await` code that pauses at `gather()`, executes tasks in parallel (even distributed), and resumes when done.
 
+## What Are Durable Functions?
+
+Durable functions are workflows that survive crashes and restarts. Your code pauses when waiting for tasks, saves its state to a database, and resumes exactly where it left off when tasks complete - even if your process dies in between.
+
+**Perfect for:** Long-running workflows, parallel task execution, distributed systems, background jobs.
+
+## How It Works
+
+Powered by [monty-python](https://github.com/lix-tech/pydantic-monty) - a sandboxed Python interpreter that can pause and serialize execution state. When your code hits `await gather()`, Monty captures the exact execution state (~800 bytes), returns pending tasks, and later resumes from that exact point with results.
+
+**Result:** Pure Python async/await that works like Temporal or AWS Step Functions, but simpler.
+
 ```python
 from durable_monty import init_db, OrchestratorService, Worker, register_function, LocalExecutor
 
