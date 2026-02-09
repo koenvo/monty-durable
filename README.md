@@ -117,9 +117,10 @@ exec_id = service.start_execution(code, ["add"])
 ### 2. Worker Processes
 
 ```python
-from durable_monty import Worker
+from durable_monty import Worker, LocalExecutor
 
-worker = Worker(service)
+executor = LocalExecutor()
+worker = Worker(service, executor)
 worker.run()
 
 # Worker loop:
