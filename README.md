@@ -151,6 +151,19 @@ worker.run()
 # Start RQ workers: rq worker my-queue
 ```
 
+**Event-driven with webhooks (AWS Lambda, Modal, etc.):**
+```python
+from durable_monty import create_app
+import uvicorn
+
+# Start webhook server
+app = create_app(service)
+uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Your executor pushes results to: POST /webhook/complete
+# { "job_id": "...", "result": ..., "status": "finished" }
+```
+
 **Custom (Modal, Lambda, etc.):**
 ```python
 from durable_monty.executor import Executor
@@ -165,7 +178,7 @@ class ModalExecutor(Executor):
         ...
 ```
 
-See [EXECUTORS.md](EXECUTORS.md) for details.
+See [EXECUTORS.md](docs/EXECUTORS.md) for details.
 
 ## Key Features
 
@@ -293,16 +306,23 @@ worker.run()
 pip install durable-monty
 
 # With RQ support
-pip install durable-monty rq redis
+pip install durable-monty[rq]
+
+# With API/webhook support
+pip install durable-monty[api]
 
 # With Postgres
-pip install durable-monty psycopg[binary]
+pip install durable-monty[postgres]
+
+# All extras
+pip install durable-monty[rq,api,postgres]
 ```
 
 Or with uv:
 ```bash
 uv add durable-monty
-uv add rq redis  # for RQ executor
+uv add durable-monty --extra api  # for webhook support
+uv add durable-monty --extra rq   # for RQ executor
 ```
 
 ## API Reference
@@ -423,17 +443,16 @@ uv run python examples/with_worker.py
 ## Examples
 
 See the `examples/` directory:
-- `simple.py` - Basic example with LocalExecutor
-- `with_worker.py` - Worker-based execution
+- `with_worker.py` - Worker-based execution (recommended)
 - `with_rq.py` - Distributed execution with RQ
+- `with_webhook.py` - Event-driven execution with webhooks
+- `simple.py` - Manual execution example
 - `poll_all.py` - Polling multiple executions
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture and data flow
-- [EXECUTORS.md](EXECUTORS.md) - Creating custom executors (Modal, Lambda, etc.)
-- [IMPLEMENTATION.md](IMPLEMENTATION.md) - Implementation guide
-- [PROJECT_PLAN.md](PROJECT_PLAN.md) - Development roadmap
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture and data flow
+- [EXECUTORS.md](docs/EXECUTORS.md) - Creating custom executors (Modal, Lambda, etc.)
 
 ## Why Durable-Monty?
 

@@ -12,6 +12,7 @@ from durable_monty.service import OrchestratorService
 from durable_monty.functions import register_function, FUNCTION_REGISTRY
 from durable_monty.worker import Worker
 from durable_monty.executor import Executor, LocalExecutor
+from durable_monty.api import create_app
 
 __all__ = [
     "__version__",
@@ -24,4 +25,5 @@ __all__ = [
     "LocalExecutor",
     "register_function",
     "FUNCTION_REGISTRY",
+    "create_app",
 ]
