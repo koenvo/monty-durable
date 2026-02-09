@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit SHA
+        type: string
+      dry-run:
+        description: Dry run
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: '3.10'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Build package
+        run: uv build
+
+      - name: Test sdist
+        run: |
+          uv pip install --python ${{ env.PYTHON_VERSION }} dist/*.tar.gz
+          uv run python -c 'import durable_monty'
+
+      - name: Test wheel
+        run: |
+          uv pip install --python ${{ env.PYTHON_VERSION }} --force-reinstall dist/*.whl
+          uv run python -c 'import durable_monty'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  publish-to-pypi:
+    needs: [build]
+    environment:
+      name: release
+      url: https://pypi.org/project/durable-monty
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to PyPI
+        if: inputs.dry-run == false
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          verbose: true
