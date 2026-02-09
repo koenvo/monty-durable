@@ -43,17 +43,13 @@ if __name__ == "__main__":
     print(f"Scheduled: {exec_id[:8]}...")
 
     # Run worker
-    worker = Worker(service, executor, poll_interval=0.5)
+    worker = Worker(service, executor)
 
     def run_worker():
         for _ in range(20):
-            worker._process_scheduled()
-            worker._process_pending_calls()
-            worker._process_submitted_jobs()
-            worker._process_waiting()
+            worker.run(once=True)
             time.sleep(0.5)
 
-    worker.running = True
     thread = threading.Thread(target=run_worker)
     thread.start()
     thread.join()

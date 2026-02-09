@@ -27,25 +27,29 @@ class Worker:
         self.running = False
         self._seen_completed = set()  # Track completed executions
 
-    def run(self) -> None:
-        """Run worker loop - poll and execute forever."""
+    def run(self, once: bool = False) -> None:
+        """
+        Run worker loop.
+
+        Args:
+            once: If True, run one iteration and return. If False, run forever.
+        """
+        if once:
+            self._process_scheduled()
+            self._process_pending_calls()
+            self._process_submitted_jobs()
+            self._process_waiting()
+            return
+
         self.running = True
         logger.info("Worker started")
 
         while self.running:
             try:
-                # 1. Start any scheduled executions
                 self._process_scheduled()
-
-                # 2. Execute pending calls
                 self._process_pending_calls()
-
-                # 3. Check submitted jobs for completion
                 self._process_submitted_jobs()
-
-                # 4. Check for completed groups and resume
                 self._process_waiting()
-
                 time.sleep(self.poll_interval)
 
             except KeyboardInterrupt:

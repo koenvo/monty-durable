@@ -69,16 +69,13 @@ if __name__ == "__main__":
     exec_id = service.start_execution(code, ["add"])
 
     executor = WebhookExecutor("http://127.0.0.1:8000")
-    worker = Worker(service, executor, poll_interval=0.1)
+    worker = Worker(service, executor)
 
     def run_worker():
         for _ in range(30):
-            worker._process_scheduled()
-            worker._process_pending_calls()
-            worker._process_waiting()
+            worker.run(once=True)
             time.sleep(0.1)
 
-    worker.running = True
     thread = threading.Thread(target=run_worker)
     thread.start()
     thread.join()
