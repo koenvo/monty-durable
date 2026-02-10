@@ -6,7 +6,7 @@ import pydantic_monty
 from sqlalchemy.orm import Session
 from sqlalchemy import Engine
 
-from durable_monty.models import Execution, Call, to_json, from_json
+from durable_monty.models import Execution, Call, ExecutionStatus, CallStatus, to_json, from_json
 
 
 class OrchestratorService:
@@ -30,7 +30,7 @@ class OrchestratorService:
                 id=execution_id,
                 code=code,
                 external_functions=to_json(external_functions),
-                status="scheduled",
+                status=ExecutionStatus.SCHEDULED,
                 inputs=to_json(inputs),
             )
             session.add(execution)
@@ -54,7 +54,7 @@ class OrchestratorService:
                 return
 
             # Get Monty progress based on execution status
-            if execution.status == "scheduled":
+            if execution.status == ExecutionStatus.SCHEDULED:
                 # First time - start fresh
                 external_functions = from_json(execution.external_functions)
                 inputs = from_json(execution.inputs)
@@ -65,7 +65,7 @@ class OrchestratorService:
                 )
                 progress = m.start(inputs=inputs) if inputs else m.start()
 
-            elif execution.status == "waiting":
+            elif execution.status == ExecutionStatus.WAITING:
                 # Resume with results
                 if not resume_group_id:
                     return
@@ -73,7 +73,7 @@ class OrchestratorService:
                 # Load completed results
                 calls = (
                     session.query(Call)
-                    .filter_by(resume_group_id=resume_group_id, status="completed")
+                    .filter_by(resume_group_id=resume_group_id, status=ExecutionStatus.COMPLETED)
                     .all()
                 )
                 results = {
@@ -103,7 +103,7 @@ class OrchestratorService:
             # Handle final progress state
             if isinstance(progress, pydantic_monty.MontyComplete):
                 # Execution finished!
-                execution.status = "completed"
+                execution.status = ExecutionStatus.COMPLETED
                 execution.output = to_json(progress.output)
                 session.commit()
 
@@ -111,7 +111,7 @@ class OrchestratorService:
                 # More external calls needed - create new resume group
                 new_resume_group_id = str(uuid.uuid4())
                 execution.state = progress.dump()
-                execution.status = "waiting"
+                execution.status = ExecutionStatus.WAITING
                 execution.current_resume_group_id = new_resume_group_id
 
                 # Save all calls in this group
@@ -123,7 +123,7 @@ class OrchestratorService:
                         call_id=call_id,
                         function_name=call_info["function"],
                         args=to_json(call_info["args"]),
-                        status="pending",
+                        status=CallStatus.PENDING,
                     )
                     session.add(call)
 
@@ -155,7 +155,7 @@ class OrchestratorService:
                 raise ValueError(f"Execution {execution_id} not found")
 
             # If completed or failed, return result
-            if execution.status in ("completed", "failed"):
+            if execution.status in (ExecutionStatus.COMPLETED, ExecutionStatus.FAILED):
                 return {
                     "execution_id": execution_id,
                     "status": execution.status,
@@ -176,8 +176,8 @@ class OrchestratorService:
             calls = session.query(Call).filter_by(resume_group_id=resume_group_id).all()
 
             total = len(calls)
-            completed = sum(1 for c in calls if c.status == "completed")
-            failed = sum(1 for c in calls if c.status == "failed")
+            completed = sum(1 for c in calls if c.status == CallStatus.COMPLETED)
+            failed = sum(1 for c in calls if c.status == CallStatus.FAILED)
             pending = [
                 {
                     "call_id": c.call_id,
@@ -186,7 +186,7 @@ class OrchestratorService:
                     "status": c.status,
                 }
                 for c in calls
-                if c.status == "pending"
+                if c.status == CallStatus.PENDING
             ]
 
             # Not all done yet
@@ -200,7 +200,7 @@ class OrchestratorService:
 
             # All done - check for failures
             if failed > 0:
-                execution.status = "failed"
+                execution.status = ExecutionStatus.FAILED
                 session.commit()
                 return {
                     "execution_id": execution_id,
@@ -215,7 +215,7 @@ class OrchestratorService:
             # Re-query to get updated status
             execution = session.query(Execution).filter_by(id=execution_id).first()
 
-            if execution.status == "completed":
+            if execution.status == ExecutionStatus.COMPLETED:
                 return {
                     "execution_id": execution_id,
                     "status": "completed",
@@ -227,9 +227,9 @@ class OrchestratorService:
                 return self.poll(execution_id)
 
     def _poll_all(self) -> list[dict[str, Any]]:
-        """Poll all executions."""
+        """Poll all waiting executions."""
         with Session(self.engine) as session:
-            executions = session.query(Execution).all()
+            executions = session.query(Execution).filter_by(status=ExecutionStatus.WAITING).all()
             return [self.poll(e.id) for e in executions]
 
     def get_pending_calls(self, execution_id: str) -> list[dict]:
@@ -237,7 +237,7 @@ class OrchestratorService:
         with Session(self.engine) as session:
             calls = (
                 session.query(Call)
-                .filter_by(execution_id=execution_id, status="pending")
+                .filter_by(execution_id=execution_id, status=CallStatus.PENDING)
                 .all()
             )
             return [
@@ -258,6 +258,50 @@ class OrchestratorService:
                 .first()
             )
             if call:
-                call.status = "completed"
+                call.status = CallStatus.COMPLETED
                 call.result = to_json(result)
                 session.commit()
+
+    def get_execution(self, execution_id: str) -> dict[str, Any]:
+        """
+        Get execution info by ID.
+
+        Returns:
+            {
+                "execution_id": str,
+                "status": "scheduled" | "waiting" | "completed" | "failed",
+                "output": result if completed, else None,
+                "error": error message if failed, else None
+            }
+
+        Raises:
+            ValueError: If execution not found
+        """
+        with Session(self.engine) as session:
+            execution = session.query(Execution).filter_by(id=execution_id).first()
+            if not execution:
+                raise ValueError(f"Execution {execution_id} not found")
+
+            return {
+                "execution_id": execution.id,
+                "status": execution.status,
+                "output": from_json(execution.output) if execution.output else None,
+                "error": execution.error if hasattr(execution, "error") else None,
+            }
+
+    def get_result(self, execution_id: str) -> Any:
+        """
+        Get the output of a completed execution.
+
+        Returns:
+            The execution output
+
+        Raises:
+            ValueError: If execution not found or not completed
+        """
+        execution = self.get_execution(execution_id)
+        if execution["status"] != ExecutionStatus.COMPLETED:
+            raise ValueError(
+                f"Execution {execution_id} is not completed (status: {execution['status'].value})"
+            )
+        return execution["output"]

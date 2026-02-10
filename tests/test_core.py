@@ -66,3 +66,50 @@ sum(results)
     result = service.poll(exec_id)
     assert result["status"] == "completed"
     assert result["output"] == 18
+
+
+def test_get_execution_and_get_result():
+    """Test get_execution() and get_result() convenience methods."""
+    code = """
+from asyncio import gather
+results = await gather(add(1, 2), add(3, 4))
+sum(results)
+"""
+    service = OrchestratorService(init_db("sqlite:///:memory:"))
+
+    exec_id = service.start_execution(code, ["add"])
+
+    # get_execution should work for scheduled execution
+    execution = service.get_execution(exec_id)
+    assert execution["status"] == "scheduled"
+    assert execution["output"] is None
+
+    # get_result should raise for non-completed execution
+    try:
+        service.get_result(exec_id)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "not completed" in str(e).lower()
+
+    # Process to completion
+    service.process_execution(exec_id)
+    for call in service.get_pending_calls(exec_id):
+        value = execute_function(call["function_name"], call["args"])
+        service.complete_call(exec_id, call["call_id"], value)
+    service.poll(exec_id)
+
+    # get_execution should return completed status
+    execution = service.get_execution(exec_id)
+    assert execution["status"] == "completed"
+    assert execution["output"] == 10
+
+    # get_result should return just the output
+    output = service.get_result(exec_id)
+    assert output == 10
+
+    # Test with non-existent execution
+    try:
+        service.get_execution("nonexistent")
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "not found" in str(e).lower()

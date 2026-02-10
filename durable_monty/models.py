@@ -1,8 +1,9 @@
 """Database models for durable-monty."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 import json
+import enum
 
 from sqlalchemy import (
     Column,
@@ -14,10 +15,28 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     create_engine,
+    Enum,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+
+class ExecutionStatus(str, enum.Enum):
+    """Status of a workflow execution."""
+    SCHEDULED = "scheduled"
+    WAITING = "waiting"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class CallStatus(str, enum.Enum):
+    """Status of an external function call."""
+    PENDING = "pending"
+    SUBMITTED = "submitted"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class Execution(Base):
@@ -29,12 +48,12 @@ class Execution(Base):
     code = Column(Text, nullable=False)
     external_functions = Column(Text, nullable=False)  # JSON list of function names
     state = Column(LargeBinary, nullable=True)  # MontyFutureSnapshot.dump()
-    status = Column(String(20), nullable=False)  # scheduled, waiting, completed, failed
+    status = Column(Enum(ExecutionStatus), nullable=False)
     current_resume_group_id = Column(String(36), nullable=True)
     inputs = Column(Text, nullable=True)  # JSON string
     output = Column(Text, nullable=True)  # JSON string
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     calls = relationship("Call", back_populates="execution", cascade="all, delete-orphan")
 
@@ -51,11 +70,11 @@ class Call(Base):
     call_id = Column(Integer, nullable=False)  # Monty's internal call_id
     function_name = Column(String(100), nullable=False)
     args = Column(Text, nullable=False)  # JSON string
-    status = Column(String(20), nullable=False, default="pending")
+    status = Column(Enum(CallStatus), nullable=False, default=CallStatus.PENDING)
     job_id = Column(String(100), nullable=True)  # External job ID (RQ/Modal/Lambda)
     result = Column(Text, nullable=True)  # JSON string
     error = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
 
     execution = relationship("Execution", back_populates="calls")

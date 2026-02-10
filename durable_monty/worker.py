@@ -1,12 +1,12 @@
 """Worker for executing durable functions."""
 
 import logging
-import time
+import threading
 from typing import Callable
 from sqlalchemy.orm import Session
 
 from durable_monty.service import OrchestratorService
-from durable_monty.models import Execution, Call, from_json
+from durable_monty.models import Execution, Call, ExecutionStatus, CallStatus, from_json
 from durable_monty.executor import Executor, LocalExecutor
 
 logger = logging.getLogger(__name__)
@@ -24,8 +24,7 @@ class Worker:
         self.service = service
         self.executor = executor
         self.poll_interval = poll_interval
-        self.running = False
-        self._seen_completed = set()  # Track completed executions
+        self._stop_event = threading.Event()
 
     def run(self, once: bool = False) -> None:
         """
@@ -41,28 +40,32 @@ class Worker:
             self._process_waiting()
             return
 
-        self.running = True
+        self._stop_event.clear()
         logger.info("Worker started")
 
-        while self.running:
+        while not self._stop_event.is_set():
             try:
                 self._process_scheduled()
                 self._process_pending_calls()
                 self._process_submitted_jobs()
                 self._process_waiting()
-                time.sleep(self.poll_interval)
+
+                # Wait for poll_interval or until stop is signaled
+                self._stop_event.wait(timeout=self.poll_interval)
 
             except KeyboardInterrupt:
                 logger.info("Worker stopping...")
-                self.running = False
+                self.stop()
             except Exception as e:
                 logger.error(f"Worker error: {e}", exc_info=True)
-                time.sleep(self.poll_interval)
+                self._stop_event.wait(timeout=self.poll_interval)
+
+        logger.info("Worker stopped")
 
     def _process_scheduled(self) -> None:
         """Start scheduled executions."""
         with Session(self.service.engine) as session:
-            scheduled = session.query(Execution).filter_by(status="scheduled").all()
+            scheduled = session.query(Execution).filter_by(status=ExecutionStatus.SCHEDULED).all()
 
             for execution in scheduled:
                 try:
@@ -74,7 +77,7 @@ class Worker:
     def _process_pending_calls(self) -> None:
         """Submit pending calls to executor."""
         with Session(self.service.engine) as session:
-            pending_calls = session.query(Call).filter_by(status="pending").limit(10).all()
+            pending_calls = session.query(Call).filter_by(status=CallStatus.PENDING).limit(10).all()
 
             for call in pending_calls:
                 try:
@@ -84,13 +87,13 @@ class Worker:
 
                     # Store job_id
                     call.job_id = job_id
-                    call.status = "submitted"
+                    call.status = CallStatus.SUBMITTED
                     session.commit()
 
                 except Exception as e:
                     # Mark as failed
                     logger.error(f"Failed to submit call {call.call_id}: {e}")
-                    call.status = "failed"
+                    call.status = CallStatus.FAILED
                     call.error = str(e)
                     session.commit()
 
@@ -103,7 +106,7 @@ class Worker:
         with Session(self.service.engine) as session:
             submitted_calls = (
                 session.query(Call)
-                .filter(Call.status == "submitted", Call.job_id.isnot(None))
+                .filter(Call.status == CallStatus.SUBMITTED, Call.job_id.isnot(None))
                 .limit(50)
                 .all()
             )
@@ -127,7 +130,7 @@ class Worker:
                     elif job_status["status"] == "failed":
                         # Job failed
                         error = job_status.get("error", "Unknown error")
-                        call.status = "failed"
+                        call.status = CallStatus.FAILED
                         call.error = error
                         session.commit()
                         logger.error(f"Job {call.job_id[:8]} failed: {error}")
@@ -140,14 +143,13 @@ class Worker:
         results = self.service.poll()
 
         for result in results:
-            if result["status"] == "completed":
+            if result["status"] == ExecutionStatus.COMPLETED.value:
                 exec_id = result["execution_id"]
-                if exec_id not in self._seen_completed:
-                    self._seen_completed.add(exec_id)
-                    logger.info(
-                        f"Execution {exec_id[:8]} completed with output: {result['output']}"
-                    )
+                logger.info(
+                    f"Execution {exec_id[:8]} completed with output: {result['output']}"
+                )
 
     def stop(self) -> None:
-        """Stop the worker."""
-        self.running = False
+        """Stop the worker gracefully."""
+        logger.info("Worker stop requested")
+        self._stop_event.set()
