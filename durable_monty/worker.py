@@ -2,6 +2,7 @@
 
 import logging
 import threading
+import time
 from typing import Callable
 from sqlalchemy.orm import Session
 
@@ -26,29 +27,35 @@ class Worker:
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
 
-    def run(self, once: bool = False) -> None:
+    def run(self, once: bool = False, until_complete: bool = False) -> None:
         """
         Run worker loop.
 
         Args:
             once: If True, run one iteration and return. If False, run forever.
+            until_complete: If True, run until all executions are completed, then stop.
         """
+        if once and until_complete:
+            raise ValueError(
+                "Cannot use both once=True and until_complete=True. "
+                "Use once=True for a single iteration, or until_complete=True to process all executions."
+            )
+
         if once:
-            self._process_scheduled()
-            self._process_pending_calls()
-            self._process_submitted_jobs()
-            self._process_waiting()
+            self._process_one_iteration()
             return
 
         self._stop_event.clear()
-        logger.info("Worker started")
+        logger.info("Worker started" + (" (until complete)" if until_complete else ""))
 
         while not self._stop_event.is_set():
             try:
-                self._process_scheduled()
-                self._process_pending_calls()
-                self._process_submitted_jobs()
-                self._process_waiting()
+                self._process_one_iteration()
+
+                # Check if we should stop (until_complete mode)
+                if until_complete and not self._has_active_executions():
+                    logger.info("All executions completed, worker stopped")
+                    break
 
                 # Wait for poll_interval or until stop is signaled
                 self._stop_event.wait(timeout=self.poll_interval)
@@ -60,7 +67,15 @@ class Worker:
                 logger.error(f"Worker error: {e}", exc_info=True)
                 self._stop_event.wait(timeout=self.poll_interval)
 
-        logger.info("Worker stopped")
+        if not until_complete:
+            logger.info("Worker stopped")
+
+    def _process_one_iteration(self) -> None:
+        """Process one iteration of work."""
+        self._process_scheduled()
+        self._process_pending_calls()
+        self._process_submitted_jobs()
+        self._process_waiting()
 
     def _process_scheduled(self) -> None:
         """Start scheduled executions."""
@@ -153,3 +168,15 @@ class Worker:
         """Stop the worker gracefully."""
         logger.info("Worker stop requested")
         self._stop_event.set()
+
+    def _has_active_executions(self) -> bool:
+        """Check if there are any active (scheduled or waiting) executions."""
+        with Session(self.service.engine) as session:
+            active = (
+                session.query(Execution)
+                .filter(
+                    Execution.status.in_([ExecutionStatus.SCHEDULED, ExecutionStatus.WAITING])
+                )
+                .count()
+            )
+            return active > 0

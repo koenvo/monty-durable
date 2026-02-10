@@ -58,11 +58,14 @@ results
 service = OrchestratorService(init_db())
 exec_id = service.start_execution(code, ["process"])
 
+# Process until complete
 worker = Worker(service, LocalExecutor())
-worker.run()
-```
+worker.run(until_complete=True)
 
-Output: `['processed_a', 'processed_b', 'processed_c']`
+# Get the result
+output = service.get_result(exec_id)
+print(output)  # ['processed_a', 'processed_b', 'processed_c']
+```
 
 ## Install
 

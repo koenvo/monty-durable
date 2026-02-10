@@ -31,6 +31,32 @@ sum(results)
     assert result['output'] == 10
 
 
+def test_worker_run_until_complete():
+    """Test worker.run(until_complete=True) processes all executions and stops."""
+    code = """
+from asyncio import gather
+results = await gather(add(1, 2), add(3, 4))
+sum(results)
+"""
+
+    service = OrchestratorService(init_db("sqlite:///:memory:"))
+    worker = Worker(service, LocalExecutor())
+
+    # Create multiple executions
+    exec_ids = []
+    for _ in range(3):
+        exec_id = service.start_execution(code, ["add"])
+        exec_ids.append(exec_id)
+
+    # Run until all complete
+    worker.run(until_complete=True)
+
+    # All should be completed
+    for exec_id in exec_ids:
+        result = service.get_result(exec_id)
+        assert result == 10
+
+
 def test_worker_stop_with_threading():
     """Test that worker can be stopped cleanly and responsively when running in a thread."""
     import threading
