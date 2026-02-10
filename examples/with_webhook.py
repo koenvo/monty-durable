@@ -50,7 +50,7 @@ class WebhookExecutor(Executor):
 
 code = """
 from asyncio import gather
-results = await gather(add(1, 2), add(3, 4), add(5, 6))
+results = await gather(add(i, 2), add(3, 4), add(i, 6))
 sum(results)
 """
 
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     time.sleep(0.5)
 
     # Schedule and run
-    exec_id = service.start_execution(code, ["add"])
+    exec_id = service.start_execution(code, ["add"], inputs={"i": 10})
 
     executor = WebhookExecutor("http://127.0.0.1:8000")
     worker = Worker(service, executor)

@@ -58,7 +58,11 @@ class OrchestratorService:
                 # First time - start fresh
                 external_functions = from_json(execution.external_functions)
                 inputs = from_json(execution.inputs)
-                m = pydantic_monty.Monty(execution.code, external_functions=external_functions)
+                m = pydantic_monty.Monty(
+                    execution.code,
+                    external_functions=external_functions,
+                    inputs=list(inputs.keys()) if inputs else None,
+                )
                 progress = m.start(inputs=inputs) if inputs else m.start()
 
             elif execution.status == "waiting":
