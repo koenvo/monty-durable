@@ -1,10 +1,9 @@
 """Core workflow tests."""
 
-from durable_monty import init_db, OrchestratorService, register_function
+from durable_monty import init_db, OrchestratorService
 from durable_monty.functions import execute_function
 
 
-@register_function("add")
 def add(a, b):
     return a + b
 
@@ -19,7 +18,7 @@ sum(results)
     service = OrchestratorService(init_db("sqlite:///:memory:"))
 
     # Schedule and start
-    exec_id = service.start_execution(code, ["add"])
+    exec_id = service.start_execution(code, [add])
     service.process_execution(exec_id)
 
     # Check pending calls created
@@ -29,7 +28,7 @@ sum(results)
 
     # Execute calls
     for call in service.get_pending_calls(exec_id):
-        value = execute_function(call["function_name"], call["args"])
+        value = execute_function(call["function_name"], call["args"], call["kwargs"])
         service.complete_call(exec_id, call["call_id"], value)
 
     # Verify completed
@@ -49,7 +48,7 @@ sum(results)
     service = OrchestratorService(init_db("sqlite:///:memory:"))
 
     # Schedule with inputs
-    exec_id = service.start_execution(code, ["add"], inputs={"x": 5, "y": 10})
+    exec_id = service.start_execution(code, [add], inputs={"x": 5, "y": 10})
     service.process_execution(exec_id)
 
     # Check pending calls were created with correct args
@@ -59,13 +58,37 @@ sum(results)
 
     # Execute calls
     for call in service.get_pending_calls(exec_id):
-        value = execute_function(call["function_name"], call["args"])
+        value = execute_function(call["function_name"], call["args"], call["kwargs"])
         service.complete_call(exec_id, call["call_id"], value)
 
     # Verify completed (add(5, 1) + add(10, 2) = 6 + 12 = 18)
     result = service.poll(exec_id)
     assert result["status"] == "completed"
     assert result["output"] == 18
+
+
+def test_execution_with_kwargs():
+    """Test workflow execution with keyword arguments."""
+    code = """
+from asyncio import gather
+# Test function calls with both args and kwargs
+results = await gather(add(1, 2), add(a=3, b=4), add(5, b=6))
+sum(results)
+"""
+    service = OrchestratorService(init_db("sqlite:///:memory:"))
+
+    exec_id = service.start_execution(code, [add])
+    service.process_execution(exec_id)
+
+    # Execute calls
+    for call in service.get_pending_calls(exec_id):
+        value = execute_function(call["function_name"], call["args"], call["kwargs"])
+        service.complete_call(exec_id, call["call_id"], value)
+
+    # Verify completed (1+2=3, 3+4=7, 5+6=11, sum=21)
+    result = service.poll(exec_id)
+    assert result["status"] == "completed"
+    assert result["output"] == 21
 
 
 def test_get_execution_and_get_result():
@@ -77,7 +100,7 @@ sum(results)
 """
     service = OrchestratorService(init_db("sqlite:///:memory:"))
 
-    exec_id = service.start_execution(code, ["add"])
+    exec_id = service.start_execution(code, [add])
 
     # get_execution should work for scheduled execution
     execution = service.get_execution(exec_id)

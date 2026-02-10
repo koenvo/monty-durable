@@ -1,9 +1,8 @@
 """Test executor interface."""
 
-from durable_monty import LocalExecutor, register_function
+from durable_monty import LocalExecutor
 
 
-@register_function("add")
 def add(a, b):
     return a + b
 
@@ -12,8 +11,8 @@ def test_local_executor():
     """Test LocalExecutor submit and check."""
     executor = LocalExecutor()
 
-    # Submit call
-    job_id = executor.submit_call("add", [2, 3])
+    # Submit call with full path
+    job_id = executor.submit_call("tests.test_executor.add", [2, 3])
     assert job_id is not None
 
     # Check job

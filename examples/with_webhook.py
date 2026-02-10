@@ -7,12 +7,11 @@ import time
 import threading
 import httpx
 import uvicorn
-from durable_monty import init_db, OrchestratorService, Worker, register_function
+from durable_monty import init_db, OrchestratorService, Worker
 from durable_monty.api import create_app
 from durable_monty.executor import Executor
 
 
-@register_function("add")
 def add(a, b):
     return a + b
 
@@ -55,6 +54,9 @@ sum(results)
 """
 
 if __name__ == "__main__":
+    # Import function from module (not __main__) so it has correct __module__ attribute
+    from examples.with_webhook import add
+
     service = OrchestratorService(init_db("sqlite:///webhook.db"))
 
     # Start webhook server in background
@@ -66,8 +68,8 @@ if __name__ == "__main__":
     server_thread.start()
     time.sleep(0.5)
 
-    # Schedule and run
-    exec_id = service.start_execution(code, ["add"], inputs={"i": 10})
+    # Schedule and run - pass function object
+    exec_id = service.start_execution(code, [add], inputs={"i": 10})
 
     executor = WebhookExecutor("http://127.0.0.1:8000")
     worker = Worker(service, executor)

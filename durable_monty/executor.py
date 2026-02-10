@@ -14,9 +14,14 @@ class Executor(ABC):
     """Abstract base class for execution engines."""
 
     @abstractmethod
-    def submit_call(self, function_name: str, args: list) -> str:
+    def submit_call(self, function_name: str, args: list, kwargs: dict | None = None) -> str:
         """
         Submit a call for execution.
+
+        Args:
+            function_name: Full path to the function
+            args: Positional arguments
+            kwargs: Keyword arguments
 
         Returns:
             job_id that can be used to check status later
@@ -46,16 +51,17 @@ class LocalExecutor(Executor):
         self.results = {}  # job_id -> result
         self.stats = {"executed": 0, "failed": 0}
 
-    def submit_call(self, function_name: str, args: list) -> str:
+    def submit_call(self, function_name: str, args: list, kwargs: dict | None = None) -> str:
         """Execute function immediately and store result."""
         job_id = str(uuid.uuid4())
 
         try:
-            logger.info(f"Executing {function_name}{tuple(args)}")
-            result = execute_function(function_name, args)
+            kwargs_str = f", {kwargs}" if kwargs else ""
+            logger.info(f"Executing {function_name}{tuple(args)}{kwargs_str}")
+            result = execute_function(function_name, args, kwargs)
 
             self.results[job_id] = {"status": "finished", "result": result}
-            logger.info(f"Completed {function_name}{tuple(args)} = {result}")
+            logger.info(f"Completed {function_name}{tuple(args)}{kwargs_str} = {result}")
             self.stats["executed"] += 1
 
         except Exception as e:

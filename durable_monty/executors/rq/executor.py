@@ -32,14 +32,13 @@ class RQExecutor(Executor):
         self.queue = Queue(queue_name, connection=self.redis_conn)
         logger.info(f"RQ executor initialized with queue '{queue_name}'")
 
-    def submit_call(self, function_name: str, args: list) -> str:
+    def submit_call(self, function_name: str, args: list, kwargs: dict | None = None) -> str:
         """Submit call to RQ and return job_id."""
         from durable_monty.executors.rq.worker import execute_call_task
 
         job = self.queue.enqueue(
             execute_call_task,
-            function_name=function_name,
-            args=args,
+            args=[function_name, args, kwargs],
             job_timeout="10m",
         )
 

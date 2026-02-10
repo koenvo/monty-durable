@@ -70,6 +70,7 @@ class Call(Base):
     call_id = Column(Integer, nullable=False)  # Monty's internal call_id
     function_name = Column(String(100), nullable=False)
     args = Column(Text, nullable=False)  # JSON string
+    kwargs = Column(Text, nullable=True)  # JSON string
     status = Column(Enum(CallStatus), nullable=False, default=CallStatus.PENDING)
     job_id = Column(String(100), nullable=True)  # External job ID (RQ/Modal/Lambda)
     result = Column(Text, nullable=True)  # JSON string

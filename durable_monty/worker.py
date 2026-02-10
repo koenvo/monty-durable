@@ -96,9 +96,10 @@ class Worker:
 
             for call in pending_calls:
                 try:
-                    # Submit to executor with function_name and args
+                    # Submit to executor with function_name, args, and kwargs
                     args = from_json(call.args)
-                    job_id = self.executor.submit_call(call.function_name, args)
+                    kwargs = from_json(call.kwargs)
+                    job_id = self.executor.submit_call(call.function_name, args, kwargs)
 
                     # Store job_id
                     call.job_id = job_id

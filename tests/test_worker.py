@@ -1,9 +1,8 @@
 """Test worker integration."""
 
-from durable_monty import init_db, OrchestratorService, Worker, LocalExecutor, register_function
+from durable_monty import init_db, OrchestratorService, Worker, LocalExecutor
 
 
-@register_function("add")
 def add(a, b):
     return a + b
 
@@ -20,7 +19,7 @@ sum(results)
     executor = LocalExecutor()
     worker = Worker(service, executor)
 
-    exec_id = service.start_execution(code, ["add"])
+    exec_id = service.start_execution(code, [add])
 
     # Run worker iterations until complete
     for _ in range(10):
@@ -45,7 +44,7 @@ sum(results)
     # Create multiple executions
     exec_ids = []
     for _ in range(3):
-        exec_id = service.start_execution(code, ["add"])
+        exec_id = service.start_execution(code, [add])
         exec_ids.append(exec_id)
 
     # Run until all complete
@@ -74,7 +73,7 @@ sum(results)
 
     # Create some executions
     for _ in range(3):
-        service.start_execution(code, ["add"])
+        service.start_execution(code, [add])
 
     # Start worker in a thread
     worker_thread = threading.Thread(target=worker.run)
@@ -106,7 +105,7 @@ sum(results)
     service = OrchestratorService(init_db("sqlite:///:memory:"))
 
     # Create first execution and complete it
-    exec_id_1 = service.start_execution(code, ["add"])
+    exec_id_1 = service.start_execution(code, [add])
     worker = Worker(service, LocalExecutor())
     for _ in range(10):
         worker.run(once=True)
@@ -116,8 +115,8 @@ sum(results)
     assert result1['status'] == 'completed'
 
     # Now create more executions
-    exec_id_2 = service.start_execution(code, ["add"])
-    exec_id_3 = service.start_execution(code, ["add"])
+    exec_id_2 = service.start_execution(code, [add])
+    exec_id_3 = service.start_execution(code, [add])
 
     # Start exec_id_2 but don't complete it
     service.process_execution(exec_id_2)

@@ -39,9 +39,8 @@ Powered by [monty-python](https://github.com/lix-tech/pydantic-monty) - a sandbo
 The main practical challenge: if you iterate quickly on workflow code, in-flight executions may break on deployment. Consider draining executions before code changes or using versioned workflows.
 
 ```python
-from durable_monty import init_db, OrchestratorService, Worker, register_function, LocalExecutor
+from durable_monty import init_db, OrchestratorService, Worker, LocalExecutor
 
-@register_function("process")
 def process(item):
     return f"processed_{item}"
 
@@ -56,7 +55,8 @@ results
 """
 
 service = OrchestratorService(init_db())
-exec_id = service.start_execution(code, ["process"])
+# Pass function object - full path derived automatically
+exec_id = service.start_execution(code, [process])
 
 # Process until complete
 worker = Worker(service, LocalExecutor())

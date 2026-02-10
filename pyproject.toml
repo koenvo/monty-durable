@@ -1,6 +1,6 @@
 [project]
 name = "durable-monty"
-version = "0.1.3"
+version = "0.1.4"
 description = "Durable functions using monty-python"
 requires-python = ">=3.10"
 dependencies = [
