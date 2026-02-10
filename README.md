@@ -1,5 +1,7 @@
 # Durable Monty
 
+> **⚠️ Experimental:** This is an experimental project exploring a different approach to durable functions. Not recommended for production use yet.
+
 **Durable functions for Python.** Write normal `async/await` code that pauses at `gather()`, executes tasks in parallel (even distributed), and resumes when done.
 
 ## What Are Durable Functions?
@@ -13,6 +15,28 @@ Durable functions are workflows that survive crashes and restarts. Your code pau
 Powered by [monty-python](https://github.com/lix-tech/pydantic-monty) - a sandboxed Python interpreter that can pause and serialize execution state. When your code hits `await gather()`, Monty captures the exact execution state (~800 bytes), returns pending tasks, and later resumes from that exact point with results.
 
 **Result:** Pure Python async/await that works like Temporal or AWS Step Functions, but simpler.
+
+### Why This Approach Is Simpler
+
+**Other frameworks (Temporal, Durable Functions, etc.):**
+- Re-execute your entire function from the start on every resume
+- Use replay/event sourcing to return cached results for completed calls
+- Example: If your workflow pauses at step 7, resuming re-runs steps 1-6 (with cached results) before continuing
+- Requires deterministic code and careful side-effect management
+
+**Durable Monty:**
+- Serializes the exact Python execution state (call stack, variables, everything)
+- No re-execution - just deserialize and continue from where you left off
+- True pause/resume - no replay, no determinism requirements, no special coding patterns
+- Simpler mental model: "save and restore" instead of "replay and cache"
+
+**Trade-offs:**
+- **Code versioning:** Changing workflow code can break in-flight executions (serialized state expects compatible code)
+- **Migration complexity:** Updating workflows requires careful handling of existing executions
+- **Less proven:** Built on [pydantic-monty](https://github.com/lix-tech/pydantic-monty), which is newer than battle-tested frameworks like Temporal
+- **Python-only:** Requires deep interpreter integration, unlike replay-based systems that work with any language
+
+The main practical challenge: if you iterate quickly on workflow code, in-flight executions may break on deployment. Consider draining executions before code changes or using versioned workflows.
 
 ```python
 from durable_monty import init_db, OrchestratorService, Worker, register_function, LocalExecutor
